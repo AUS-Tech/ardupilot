@@ -162,7 +162,6 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(strobe_lights_update,    100,    1000),
 };
 
-
 void Copter::setup() 
 {
     cliSerial = hal.console;
@@ -226,9 +225,8 @@ void Copter::stats_update(void)
     g2.stats.update();
 }
 
-#define STROBE_LIGHTS_RCOUTCHANNEL              5
 #define STROBE_LIGHTS_DUTYCYCLE_MIN             0
-#define STROBE_LIGHTS_DUTYCYCLE_MAX             2200
+#define STROBE_LIGHTS_DUTYCYCLE_MAX             1
 #define STROBE_STAGE_1      1
 #define STROBE_STAGE_2      2
 #define STROBE_STAGE_3      3
@@ -236,11 +234,11 @@ void Copter::stats_update(void)
 #define STROBE_STAGE_5      5
 #define STROBE_STAGE_6      6
 
-#define STROBING_CYCLE_TIME_MS          700
+#define STROBING_CYCLE_TIME_MS          1400
 #define STROBE_STAGE_1_THRSHLD_TIME_MS  25
-#define STROBE_STAGE_2_THRSHLD_TIME_MS  50
+#define STROBE_STAGE_2_THRSHLD_TIME_MS  60
 #define STROBE_STAGE_3_THRSHLD_TIME_MS  25
-#define STROBE_STAGE_4_THRSHLD_TIME_MS  50
+#define STROBE_STAGE_4_THRSHLD_TIME_MS  60
 #define STROBE_STAGE_5_THRSHLD_TIME_MS  25
 #define STROBE_STAGE_6_THRSHLD_TIME_MS  (STROBING_CYCLE_TIME_MS -           \
                                         (STROBE_STAGE_1_THRSHLD_TIME_MS+    \
@@ -248,18 +246,106 @@ void Copter::stats_update(void)
                                          STROBE_STAGE_3_THRSHLD_TIME_MS+    \
                                          STROBE_STAGE_4_THRSHLD_TIME_MS+    \
                                          STROBE_STAGE_5_THRSHLD_TIME_MS))
-bool StrobeLights_InUse = false;
+
+
+#define HEADING_BLINK_STAGE_1      1
+#define HEADING_BLINK_STAGE_2      2
+#define HEADING_BLINK_CYCLE_TIME_MS             500
+#define HEADING_BLINK_STAGE_1_THRSHLD_TIME_MS   250
+#define HEADING_BLINK_STAGE_2_THRSHLD_TIME_MS                                     \
+                                        (HEADING_BLINK_CYCLE_TIME_MS -            \
+                                        (HEADING_BLINK_STAGE_1_THRSHLD_TIME_MS)   \
+                                                )
+
 void Copter::strobe_lights_update(void) {
     static bool init_isDone = false;
+    static int strobe_lights_channel = -1;
+    static int heading_lightsRed_channel = -1;
+    static int heading_lightsGreen_channel = -1;
     static uint16_t strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
     static uint16_t strobe_light_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
+    static uint16_t heading_lightsRed_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+    static uint16_t heading_lightsRed_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
+    static uint16_t heading_lightsGreen_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+    static uint16_t heading_lightsGreen_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
     static uint8_t strobe_stage = STROBE_STAGE_1;
     static uint64_t millis_previous_stageChange = 0;
+    static uint64_t millis_previous_headingBlinkStageChange = 0;
+
+    static uint8_t max_num_of_gpios = 0;
+    static uint8_t max_strobe_channels = 0;
+    static uint8_t valid_channel = 0;
+    static uint8_t heading_blink_stage = HEADING_BLINK_STAGE_1;
+
 
     if (!init_isDone) {
         hal.console->printf("Starting Strobe Lights\n");
-        hal.rcout->enable_ch(STROBE_LIGHTS_RCOUTCHANNEL);
+        switch (AP_BoardConfig::get_board_type()) {
+        /* AUS TODO: Fixing a particular GPIO and implementing necessary changes for
+         * strobe on that GPIO
+         * pin for Pixhawk and Cube. Also fix any conflicts if the pin is from an
+         * already configured timer like rcout pins.
+         */
+            case AP_BoardConfig::PX4_BOARD_PIXHAWK:
+            case AP_BoardConfig::PX4_BOARD_PIXHAWK2:
+                /* This is to be obtained from _gpio_tab[] of the file
+                 * px4fmu/fmu.cpp of
+                 * PX4Firmware.
+                 */
+                max_num_of_gpios = 13;
+                max_strobe_channels = 1;
+                strobe_lights_channel = max_num_of_gpios-max_strobe_channels + (50);
+                hal.gpio->pinMode(strobe_lights_channel, HAL_GPIO_OUTPUT);
+                break;
+            case AP_BoardConfig::PX4_BOARD_FMUINV1:
+                /* This is to be obtained from _gpio_tab[] of the file
+                 * px4fmu/fmu.cpp of
+                 * PX4Firmware.
+                 */
+                max_num_of_gpios = 9;
+                max_strobe_channels = 3;
+                heading_lightsRed_channel = max_num_of_gpios-max_strobe_channels + (50);
+                heading_lightsGreen_channel = max_num_of_gpios-max_strobe_channels+1
+                        + (50);
+                strobe_lights_channel = max_num_of_gpios-max_strobe_channels+2
+                        + (50);
+                hal.gpio->pinMode(heading_lightsRed_channel, HAL_GPIO_OUTPUT);
+                hal.gpio->pinMode(heading_lightsGreen_channel, HAL_GPIO_OUTPUT);
+                hal.gpio->pinMode(strobe_lights_channel, HAL_GPIO_OUTPUT);
+                break;
+            default:
+                break;
+        }
+        valid_channel = max_num_of_gpios - max_strobe_channels;
         init_isDone = true;
+    }
+
+    switch (heading_blink_stage) {
+    case HEADING_BLINK_STAGE_1:
+        if (AP_HAL::millis64() - millis_previous_headingBlinkStageChange >=
+                HEADING_BLINK_STAGE_1_THRSHLD_TIME_MS) {
+            heading_blink_stage = HEADING_BLINK_STAGE_2;
+            millis_previous_headingBlinkStageChange = AP_HAL::millis64();
+        }
+        break;
+    case HEADING_BLINK_STAGE_2:
+        if (AP_HAL::millis64() - millis_previous_headingBlinkStageChange >=
+                HEADING_BLINK_STAGE_2_THRSHLD_TIME_MS) {
+            heading_blink_stage = HEADING_BLINK_STAGE_1;
+            millis_previous_headingBlinkStageChange = AP_HAL::millis64();
+        }
+        break;
+    }
+
+    switch (heading_blink_stage) {
+    case HEADING_BLINK_STAGE_1:
+        heading_lightsRed_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MAX;
+        heading_lightsGreen_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+        break;
+    case HEADING_BLINK_STAGE_2:
+        heading_lightsRed_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+        heading_lightsGreen_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MAX;
+        break;
     }
 
     switch (strobe_stage) {
@@ -329,10 +415,21 @@ void Copter::strobe_lights_update(void) {
     }
 
     if (strobe_lights_dutyCycle != strobe_light_dutyCycle_previous) {
-        StrobeLights_InUse = true;
-        hal.rcout->write(STROBE_LIGHTS_RCOUTCHANNEL, strobe_lights_dutyCycle);
-        StrobeLights_InUse = false;
+        if (strobe_lights_channel >= valid_channel)
+            hal.gpio->write(strobe_lights_channel, strobe_lights_dutyCycle);
         strobe_light_dutyCycle_previous = strobe_lights_dutyCycle;
+    }
+
+    if (heading_lightsRed_dutyCycle != heading_lightsRed_dutyCycle_previous) {
+        if (heading_lightsRed_channel >= valid_channel)
+            hal.gpio->write(heading_lightsRed_channel, heading_lightsRed_dutyCycle);
+        heading_lightsRed_dutyCycle_previous = heading_lightsRed_dutyCycle;
+    }
+
+    if (heading_lightsGreen_dutyCycle != heading_lightsGreen_dutyCycle_previous) {
+        if (heading_lightsGreen_channel >= valid_channel)
+            hal.gpio->write(heading_lightsGreen_channel, heading_lightsGreen_dutyCycle);
+        heading_lightsGreen_dutyCycle_previous = heading_lightsGreen_dutyCycle;
     }
 }
 
