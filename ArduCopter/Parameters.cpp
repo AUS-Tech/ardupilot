@@ -891,6 +891,13 @@ const AP_Param::Info Copter::var_info[] = {
 	// @ReadOnly: True
 	GSCALAR(num_takeoffs,          "NUM_TAKEOFFS",  0),
 
+    // @Param: STROBE_LIGHTS_ENABLED
+    // @DisplayName: Strobe Lights enabled/disabled
+    // @Description: This is used to enable/disable Strobe lights.
+	// @Range: 0 1
+    // @User: Standard
+    GSCALAR(strobe_lights_enabled,          "STROBE_ENABLED",  1),
+
 
     // @Group: 
     // @Path: Parameters.cpp

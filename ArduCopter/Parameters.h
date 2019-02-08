@@ -368,6 +368,11 @@ public:
 
         // 254,255: reserved
 
+		//
+		// 256: Strobe Lights Control
+		//
+		k_param_strobe_lights_enabled = 256,
+
         // the k_param_* space is 9-bits in size
         // 511: reserved
     };
@@ -486,6 +491,9 @@ public:
     AP_Float                autotune_min_d;
 
     AP_Int16				num_takeoffs;
+
+    //Strobe Lights Control param variable
+    AP_Int8                 strobe_lights_enabled;
 
     // Note: keep initializers here in the same order as they are declared
     // above.

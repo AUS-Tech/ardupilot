@@ -277,6 +277,17 @@ void Copter::strobe_lights_update(void) {
     static uint8_t valid_channel = 0;
     static uint8_t heading_blink_stage = HEADING_BLINK_STAGE_1;
 
+    /* Turn Off and Disable strobe lights if the functionality is disabled  */
+    if (g.strobe_lights_enabled == 0) {
+        hal.gpio->pinMode(heading_lightsRed_channel, HAL_GPIO_OUTPUT);
+        hal.gpio->pinMode(heading_lightsGreen_channel, HAL_GPIO_OUTPUT);
+        hal.gpio->pinMode(strobe_lights_channel, HAL_GPIO_OUTPUT);
+        hal.gpio->write(heading_lightsRed_channel, 0);
+        hal.gpio->write(heading_lightsGreen_channel, 0);
+        hal.gpio->write(strobe_lights_channel, 0);
+        init_isDone = false;
+        return;
+    }
 
     if (!init_isDone) {
         hal.console->printf("Starting Strobe Lights\n");
