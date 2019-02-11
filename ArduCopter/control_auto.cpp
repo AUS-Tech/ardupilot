@@ -260,7 +260,10 @@ void Copter::auto_wp_run()
         // get pilot's desired yaw rate
         target_yaw_rate = get_pilot_desired_yaw_rate(channel_yaw->get_control_in());
         if (!is_zero(target_yaw_rate)) {
-            set_auto_yaw_mode(AUTO_YAW_HOLD);
+            /* AUS: Hack to avoid mode change to yaw hold, during Waypoint auto mission,
+             * for inv2.
+             */
+           /* set_auto_yaw_mode(AUTO_YAW_HOLD);*/
         }
     }
 
