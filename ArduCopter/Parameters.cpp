@@ -898,6 +898,27 @@ const AP_Param::Info Copter::var_info[] = {
     // @User: Standard
     GSCALAR(strobe_lights_enabled,          "STROBE_ENABLED",  1),
 
+    // @Param: STROBE_BURST_COUNT
+    // @DisplayName: Strobe Lights Burst Count
+    // @Description: Number of strobe bursts in a cycle
+    // @Range: 0 255
+    // @User: Standard
+    GSCALAR(strobe_lights_numberOfBursts,          "STROBE_BURSTCNT",  3),
+
+    // @Param: STROBE_LIGHTS_INTERBURST_DELAY_MS
+    // @DisplayName: Strobe Lights Interburst Delay in ms
+    // @Description: Delay, in ms, between each strobe burst in a cycle
+    // @Range: 0 65535
+    // @User: Standard
+    GSCALAR(strobe_lights_interburst_delay_ms,          "STROBE_BRST_GAP",  60),
+
+    // @Param: STROBE_LIGHTS_CYCLE_TIME_MS
+    // @DisplayName: Strobe Lights Cycle Time in ms
+    // @Description: Length of strobe cycle, in ms.
+    // @Range: 0 65535
+    // @User: Standard
+    GSCALAR(strobe_lights_cycle_ms,          "STROBE_CYC_LEN",  1400),
+
 
     // @Group: 
     // @Path: Parameters.cpp

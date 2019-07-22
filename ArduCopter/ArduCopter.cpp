@@ -234,18 +234,19 @@ void Copter::stats_update(void)
 #define STROBE_STAGE_5      5
 #define STROBE_STAGE_6      6
 
-#define STROBING_CYCLE_TIME_MS          1400
-#define STROBE_STAGE_1_THRSHLD_TIME_MS  25
-#define STROBE_STAGE_2_THRSHLD_TIME_MS  60
-#define STROBE_STAGE_3_THRSHLD_TIME_MS  25
-#define STROBE_STAGE_4_THRSHLD_TIME_MS  60
-#define STROBE_STAGE_5_THRSHLD_TIME_MS  25
-#define STROBE_STAGE_6_THRSHLD_TIME_MS  (STROBING_CYCLE_TIME_MS -           \
-                                        (STROBE_STAGE_1_THRSHLD_TIME_MS+    \
-                                         STROBE_STAGE_2_THRSHLD_TIME_MS+    \
-                                         STROBE_STAGE_3_THRSHLD_TIME_MS+    \
-                                         STROBE_STAGE_4_THRSHLD_TIME_MS+    \
-                                         STROBE_STAGE_5_THRSHLD_TIME_MS))
+
+#define STROBE_BURST_LENGTH_MS          25
+////#define STROBE_INTERBURST_DELAY_MS      60
+//#define STROBE_INTERBURST_DELAY_MS      g.strobe_lights_interburst_delay_ms
+//
+////#define STROBING_CYCLE_TIME_MS          1400
+//#define STROBING_CYCLE_TIME_MS          g.strobe_lights_periodicity_ms
+//
+//#define STROBE_STAGE_1_THRSHLD_TIME_MS  STROBE_BURST_LENGTH_MS
+//#define STROBE_STAGE_2_THRSHLD_TIME_MS  STROBE_INTERBURST_DELAY_MS
+//#define STROBE_STAGE_3_THRSHLD_TIME_MS  STROBE_BURST_LENGTH_MS
+//#define STROBE_STAGE_4_THRSHLD_TIME_MS  STROBE_INTERBURST_DELAY_MS
+//#define STROBE_STAGE_5_THRSHLD_TIME_MS  STROBE_BURST_LENGTH_MS
 
 
 #define HEADING_BLINK_STAGE_1      1
@@ -256,6 +257,9 @@ void Copter::stats_update(void)
                                         (HEADING_BLINK_CYCLE_TIME_MS -            \
                                         (HEADING_BLINK_STAGE_1_THRSHLD_TIME_MS)   \
                                                 )
+
+#define STROBE_INIT_STAGE       1
+
 
 void Copter::strobe_lights_update(void) {
     static bool init_isDone = false;
@@ -268,7 +272,8 @@ void Copter::strobe_lights_update(void) {
     static uint16_t heading_lightsRed_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
     static uint16_t heading_lightsGreen_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
     static uint16_t heading_lightsGreen_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
-    static uint8_t strobe_stage = STROBE_STAGE_1;
+//    static uint8_t strobe_stage = STROBE_STAGE_1;
+    static uint8_t strobe_stage = STROBE_INIT_STAGE;
     static uint64_t millis_previous_stageChange = 0;
     static uint64_t millis_previous_headingBlinkStageChange = 0;
 
@@ -359,50 +364,83 @@ void Copter::strobe_lights_update(void) {
         break;
     }
 
-    switch (strobe_stage) {
-    case STROBE_STAGE_1:
-        if (AP_HAL::millis64() - millis_previous_stageChange >=
-                STROBE_STAGE_1_THRSHLD_TIME_MS) {
-            strobe_stage = STROBE_STAGE_2;
-            millis_previous_stageChange = AP_HAL::millis64();
-        }
-        break;
-    case STROBE_STAGE_2:
-        if (AP_HAL::millis64() - millis_previous_stageChange >=
-                STROBE_STAGE_2_THRSHLD_TIME_MS) {
-            strobe_stage = STROBE_STAGE_3;
-            millis_previous_stageChange = AP_HAL::millis64();
-        }
-        break;
-    case STROBE_STAGE_3:
-        if (AP_HAL::millis64() - millis_previous_stageChange >=
-                STROBE_STAGE_3_THRSHLD_TIME_MS) {
-            strobe_stage = STROBE_STAGE_4;
-            millis_previous_stageChange = AP_HAL::millis64();
-        }
-        break;
-    case STROBE_STAGE_4:
-        if (AP_HAL::millis64() - millis_previous_stageChange >=
-                STROBE_STAGE_4_THRSHLD_TIME_MS) {
-            strobe_stage = STROBE_STAGE_5;
-            millis_previous_stageChange = AP_HAL::millis64();
-        }
-        break;
-    case STROBE_STAGE_5:
-        if (AP_HAL::millis64() - millis_previous_stageChange >=
-                STROBE_STAGE_5_THRSHLD_TIME_MS) {
-            strobe_stage = STROBE_STAGE_6;
-            millis_previous_stageChange = AP_HAL::millis64();
-        }
-        break;
-    case STROBE_STAGE_6:
-        if (AP_HAL::millis64() - millis_previous_stageChange >=
-                STROBE_STAGE_6_THRSHLD_TIME_MS) {
-            strobe_stage = STROBE_STAGE_1;
-            millis_previous_stageChange = AP_HAL::millis64();
-        }
-        break;
+    if (strobe_stage > g.strobe_lights_numberOfBursts*2) {
+        /* Re-init for next cycle  */
+        strobe_stage = STROBE_INIT_STAGE;
     }
+
+    if (!(strobe_stage%2)) {
+        /* If the current stage of strobing is the last stage in the strobing cycle  */
+        if (strobe_stage == (g.strobe_lights_numberOfBursts*2)) {
+            if (AP_HAL::millis64() - millis_previous_stageChange >=
+                    g.strobe_lights_cycle_ms -
+                    (g.strobe_lights_numberOfBursts*STROBE_BURST_LENGTH_MS) -
+                    ((g.strobe_lights_numberOfBursts-1)*g.strobe_lights_interburst_delay_ms)
+                    ) {
+                strobe_stage += 1;
+                millis_previous_stageChange = AP_HAL::millis64();
+            }
+        }
+        else {
+            if (AP_HAL::millis64() - millis_previous_stageChange >=
+                    g.strobe_lights_interburst_delay_ms) {
+                strobe_stage += 1;
+                millis_previous_stageChange = AP_HAL::millis64();
+            }
+        }
+    }
+    else {
+        if (AP_HAL::millis64() - millis_previous_stageChange >=
+                STROBE_BURST_LENGTH_MS) {
+            strobe_stage += 1;
+            millis_previous_stageChange = AP_HAL::millis64();
+        }
+    }
+
+//    switch (strobe_stage) {
+//    case STROBE_STAGE_1:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_1_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_2;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_2:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_2_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_3;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_3:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_3_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_4;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_4:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_4_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_5;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_5:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_5_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_6;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_6:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_6_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_1;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    }
 
     switch (strobe_stage) {
     case STROBE_STAGE_1:
@@ -443,6 +481,195 @@ void Copter::strobe_lights_update(void) {
         heading_lightsGreen_dutyCycle_previous = heading_lightsGreen_dutyCycle;
     }
 }
+
+
+
+//void Copter::strobe_lights_update(void) {
+//    static bool init_isDone = false;
+//    static int strobe_lights_channel = -1;
+//    static int heading_lightsRed_channel = -1;
+//    static int heading_lightsGreen_channel = -1;
+//    static uint16_t strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//    static uint16_t strobe_light_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//    static uint16_t heading_lightsRed_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//    static uint16_t heading_lightsRed_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//    static uint16_t heading_lightsGreen_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//    static uint16_t heading_lightsGreen_dutyCycle_previous = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//    static uint8_t strobe_stage = STROBE_STAGE_1;
+//    static uint64_t millis_previous_stageChange = 0;
+//    static uint64_t millis_previous_headingBlinkStageChange = 0;
+//
+//    static uint8_t max_num_of_gpios = 0;
+//    static uint8_t max_strobe_channels = 0;
+//    static uint8_t valid_channel = 0;
+//    static uint8_t heading_blink_stage = HEADING_BLINK_STAGE_1;
+//
+//    /* Turn Off and Disable strobe lights if the functionality is disabled  */
+//    if (g.strobe_lights_enabled == 0) {
+//        hal.gpio->pinMode(heading_lightsRed_channel, HAL_GPIO_OUTPUT);
+//        hal.gpio->pinMode(heading_lightsGreen_channel, HAL_GPIO_OUTPUT);
+//        hal.gpio->pinMode(strobe_lights_channel, HAL_GPIO_OUTPUT);
+//        hal.gpio->write(heading_lightsRed_channel, 0);
+//        hal.gpio->write(heading_lightsGreen_channel, 0);
+//        hal.gpio->write(strobe_lights_channel, 0);
+//        init_isDone = false;
+//        return;
+//    }
+//
+//    if (!init_isDone) {
+//        hal.console->printf("Starting Strobe Lights\n");
+//        switch (AP_BoardConfig::get_board_type()) {
+//        /* AUS TODO: Fixing a particular GPIO and implementing necessary changes for
+//         * strobe on that GPIO
+//         * pin for Pixhawk and Cube. Also fix any conflicts if the pin is from an
+//         * already configured timer like rcout pins.
+//         */
+//            case AP_BoardConfig::PX4_BOARD_PIXHAWK:
+//            case AP_BoardConfig::PX4_BOARD_PIXHAWK2:
+//                /* This is to be obtained from _gpio_tab[] of the file
+//                 * px4fmu/fmu.cpp of
+//                 * PX4Firmware.
+//                 */
+//                max_num_of_gpios = 13;
+//                max_strobe_channels = 1;
+//                strobe_lights_channel = max_num_of_gpios-max_strobe_channels + (50);
+//                hal.gpio->pinMode(strobe_lights_channel, HAL_GPIO_OUTPUT);
+//                break;
+//            case AP_BoardConfig::PX4_BOARD_FMUINV1:
+//                /* This is to be obtained from _gpio_tab[] of the file
+//                 * px4fmu/fmu.cpp of
+//                 * PX4Firmware.
+//                 */
+//                max_num_of_gpios = 9;
+//                max_strobe_channels = 3;
+//                heading_lightsRed_channel = max_num_of_gpios-max_strobe_channels + (50);
+//                heading_lightsGreen_channel = max_num_of_gpios-max_strobe_channels+1
+//                        + (50);
+//                strobe_lights_channel = max_num_of_gpios-max_strobe_channels+2
+//                        + (50);
+//                hal.gpio->pinMode(heading_lightsRed_channel, HAL_GPIO_OUTPUT);
+//                hal.gpio->pinMode(heading_lightsGreen_channel, HAL_GPIO_OUTPUT);
+//                hal.gpio->pinMode(strobe_lights_channel, HAL_GPIO_OUTPUT);
+//                break;
+//            default:
+//                break;
+//        }
+//        valid_channel = max_num_of_gpios - max_strobe_channels;
+//        init_isDone = true;
+//    }
+//
+//    switch (heading_blink_stage) {
+//    case HEADING_BLINK_STAGE_1:
+//        if (AP_HAL::millis64() - millis_previous_headingBlinkStageChange >=
+//                HEADING_BLINK_STAGE_1_THRSHLD_TIME_MS) {
+//            heading_blink_stage = HEADING_BLINK_STAGE_2;
+//            millis_previous_headingBlinkStageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case HEADING_BLINK_STAGE_2:
+//        if (AP_HAL::millis64() - millis_previous_headingBlinkStageChange >=
+//                HEADING_BLINK_STAGE_2_THRSHLD_TIME_MS) {
+//            heading_blink_stage = HEADING_BLINK_STAGE_1;
+//            millis_previous_headingBlinkStageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    }
+//
+//    switch (heading_blink_stage) {
+//    case HEADING_BLINK_STAGE_1:
+//        heading_lightsRed_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MAX;
+//        heading_lightsGreen_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//        break;
+//    case HEADING_BLINK_STAGE_2:
+//        heading_lightsRed_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//        heading_lightsGreen_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MAX;
+//        break;
+//    }
+//
+//    switch (strobe_stage) {
+//    case STROBE_STAGE_1:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_1_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_2;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_2:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_2_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_3;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_3:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_3_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_4;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_4:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_4_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_5;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_5:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_5_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_6;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    case STROBE_STAGE_6:
+//        if (AP_HAL::millis64() - millis_previous_stageChange >=
+//                STROBE_STAGE_6_THRSHLD_TIME_MS) {
+//            strobe_stage = STROBE_STAGE_1;
+//            millis_previous_stageChange = AP_HAL::millis64();
+//        }
+//        break;
+//    }
+//
+//    switch (strobe_stage) {
+//    case STROBE_STAGE_1:
+//        strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MAX;
+//        break;
+//    case STROBE_STAGE_2:
+//        strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//        break;
+//    case STROBE_STAGE_3:
+//        strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MAX;
+//        break;
+//    case STROBE_STAGE_4:
+//        strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//        break;
+//    case STROBE_STAGE_5:
+//        strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MAX;
+//        break;
+//    case STROBE_STAGE_6:
+//        strobe_lights_dutyCycle = STROBE_LIGHTS_DUTYCYCLE_MIN;
+//        break;
+//    }
+//
+//    if (strobe_lights_dutyCycle != strobe_light_dutyCycle_previous) {
+//        if (strobe_lights_channel >= valid_channel)
+//            hal.gpio->write(strobe_lights_channel, strobe_lights_dutyCycle);
+//        strobe_light_dutyCycle_previous = strobe_lights_dutyCycle;
+//    }
+//
+//    if (heading_lightsRed_dutyCycle != heading_lightsRed_dutyCycle_previous) {
+//        if (heading_lightsRed_channel >= valid_channel)
+//            hal.gpio->write(heading_lightsRed_channel, heading_lightsRed_dutyCycle);
+//        heading_lightsRed_dutyCycle_previous = heading_lightsRed_dutyCycle;
+//    }
+//
+//    if (heading_lightsGreen_dutyCycle != heading_lightsGreen_dutyCycle_previous) {
+//        if (heading_lightsGreen_channel >= valid_channel)
+//            hal.gpio->write(heading_lightsGreen_channel, heading_lightsGreen_dutyCycle);
+//        heading_lightsGreen_dutyCycle_previous = heading_lightsGreen_dutyCycle;
+//    }
+//}
 
 void Copter::loop()
 {

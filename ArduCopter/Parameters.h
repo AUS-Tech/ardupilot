@@ -372,6 +372,9 @@ public:
 		// 256: Strobe Lights Control
 		//
 		k_param_strobe_lights_enabled = 256,
+		k_param_strobe_lights_numberOfBursts = 257,
+		k_param_strobe_lights_cycle_ms = 258,
+		k_param_strobe_lights_interburst_delay_ms = 259,
 
         // the k_param_* space is 9-bits in size
         // 511: reserved
@@ -494,6 +497,9 @@ public:
 
     //Strobe Lights Control param variable
     AP_Int8                 strobe_lights_enabled;
+    AP_Int8                 strobe_lights_numberOfBursts;
+    AP_Int16                strobe_lights_interburst_delay_ms;
+    AP_Int16                strobe_lights_cycle_ms;
 
     // Note: keep initializers here in the same order as they are declared
     // above.
